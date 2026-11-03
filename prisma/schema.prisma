@@ -1,0 +1,75 @@
+// Prisma schema for Faceless Shorts Maker
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Short {
+  id           String   @id @default(cuid())
+  campaignId   String?  // null = manually created, set = autonomous
+  campaign     Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  hint         String   // The user's input hint/topic
+  title        String   // YouTube title
+  script       String   // Full voiceover script
+  captionText  String   // Plain caption text (for subtitle generation)
+  hook         String   // First 3-5 words used as on-screen hook
+  imagePrompts String   // JSON array of image prompts
+  imagePaths   String   // JSON array of generated image file paths
+  audioPath    String?  // Voiceover audio file path
+  videoPath    String?  // Final composed video file path
+  thumbnailPath String? // Optional thumbnail
+
+  status       String   @default("draft") // draft | generating | ready | scheduled | posting | posted | failed
+  progress     Int      @default(0) // 0-100
+  progressStep String   @default("") // current step description
+  error        String?  // error message if failed
+
+  scheduledAt  DateTime? // when to post
+  postedAt     DateTime? // when actually posted
+  youtubeVideoId String? // YouTube video ID after posting
+
+  tags         String   @default("") // comma separated hashtags for description
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([campaignId])
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
+
+model Campaign {
+  id           String   @id @default(cuid())
+  name         String   // e.g. "USA Motivational"
+  niche        String   // e.g. "motivational", "fun facts", "history"
+  systemPrompt String?  // optional custom instructions for the LLM
+  imageMode    String   @default("ai") // ai | gradient
+  slotsPerDay  Int      @default(3)
+  slotTimesEt  String   @default("9,13,19") // comma-separated hours ET (24h)
+  active       Boolean  @default(true)
+  topicsJson   String   @default("[]") // JSON array of {topic, used, scheduledAt}
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  shorts       Short[]
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  shortId   String?
+  action    String   // generate | schedule | post | error | etc
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
