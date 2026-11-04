@@ -1,65 +1,52 @@
-# Optimized Dockerfile for Render free tier (512MB RAM)
-# Multi-stage build to minimize final image size and build memory usage
+# Minimal Dockerfile for Render free tier - aggressive memory optimization
 
-# Stage 1: Build
 FROM node:20-slim AS builder
 
-# Install only essential build deps (ffmpeg installed in runtime stage)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Install only openssl (Prisma needs it for Postgres)
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lock* ./
+# Copy package files first
+COPY package.json ./
+# Don't use lockfile to avoid issues, just install
+RUN npm install --omit=dev --no-audit --no-fund --prefer-offline
 
-# Install only production deps first (smaller, faster)
-RUN npm install --omit=dev --no-audit --no-fund
-
-# Copy prisma and generate client
+# Copy prisma and generate
 COPY prisma ./prisma
 RUN npx prisma generate
 
-# Copy all source and build
+# Copy source
 COPY . .
 
-# Disable Next.js telemetry
+# Build with VERY tight memory limit
 ENV NEXT_TELEMETRY_DISABLED=1
-
-# Build with low memory settings
-ENV NODE_OPTIONS="--max-old-space-size=400"
+ENV NODE_OPTIONS="--max-old-space-size=300"
+# Disable SWC minification to save memory, use simpler build
 RUN npm run build
 
-# Stage 2: Runtime (much smaller)
+# Stage 2: runtime
 FROM node:20-slim
 
-# Install ffmpeg + fonts for video composition at runtime
+# ffmpeg + minimal fonts
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    fonts-dejavu-core \
-    fonts-freefont-ttf \
-    openssl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    ffmpeg fonts-dejavu-core fonts-freefont-ttf openssl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy built app from builder stage
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/next.config.ts ./
-COPY --from=builder /app/tsconfig.json ./
 COPY --from=builder /app/postcss.config.mjs ./
 COPY --from=builder /app/tailwind.config.ts ./
 COPY --from=builder /app/components.json ./
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./
 
-# Create storage dirs
 RUN mkdir -p /app/storage/videos /app/storage/audio /app/storage/images /app/storage/clips /app/storage/thumbnails
 
 ENV NODE_ENV=production
@@ -68,5 +55,4 @@ ENV STORAGE_ROOT=/app/storage
 ENV NEXT_TELEMETRY_DISABLED=1
 EXPOSE 3000
 
-# Run migrations + start
 CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npm run start"]
