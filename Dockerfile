@@ -43,5 +43,6 @@ ENV STORAGE_ROOT=/app/storage
 EXPOSE 3000
 
 # Start: run migrations, then start Next.js on Render's PORT
-# Render provides $PORT env var (default 3000)
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && PORT=${PORT:-3000} npx next start -p ${PORT:-3000}"]
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+CMD ["/app/start.sh"]
