@@ -8,9 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
 WORKDIR /app
 
 # Copy package files first
-COPY package.json ./
-# Don't use lockfile to avoid issues, just install
-RUN npm install --omit=dev --no-audit --no-fund --prefer-offline
+COPY package.json package-lock.json ./
+# Use npm ci for fast, reproducible installs (uses package-lock.json)
+RUN npm ci --omit=dev --no-audit --no-fund 2>/dev/null || npm install --omit=dev --no-audit --no-fund
 
 # Copy prisma and generate
 COPY prisma ./prisma
