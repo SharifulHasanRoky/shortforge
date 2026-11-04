@@ -1,0 +1,25 @@
+# Render.com Blueprint - free deployment config
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: shortforge
+    runtime: docker
+    plan: free  # 512MB RAM, 750 hours/month - $0 cost
+    healthCheckPath: /api/health
+    healthCheckTimeout: 60
+    autoDeploy: true
+    dockerfilePath: ./Dockerfile
+    envVars:
+      # Database URL - set this in Render dashboard from Supabase
+      - key: DATABASE_URL
+        sync: false  # you'll set this manually after creating Supabase DB
+      # Storage root for generated videos/audio/images (ephemeral on free tier)
+      - key: STORAGE_ROOT
+        value: /app/storage
+      # Port (Render provides this automatically, but we set it explicitly)
+      - key: PORT
+        value: 3000
+      # Disable Next.js telemetry
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"

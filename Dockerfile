@@ -1,9 +1,10 @@
 # Dockerfile for ShortForge - Faceless YouTube Shorts Automation
-# Uses ffmpeg + Node.js + Bun for full pipeline support
+# Uses ffmpeg + Node.js for full pipeline support
+# Works with PostgreSQL (Supabase/Neon) and SQLite (local dev)
 
 FROM node:20-slim
 
-# Install ffmpeg, fonts (for captions), and other deps
+# Install ffmpeg, fonts (for captions), OpenSSL (for Prisma), and other deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     fonts-dejavu \
@@ -11,13 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-extra \
     fonts-noto-color-emoji \
     fonts-freefont-ttf \
+    openssl \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Bun
-RUN curl -fsSL https://bun.sh/install | bash && \
-    ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
 # Set working directory
 WORKDIR /app
@@ -25,28 +23,28 @@ WORKDIR /app
 # Copy package files first for better layer caching
 COPY package.json bun.lock* ./
 
-# Install dependencies
-RUN bun install --frozen-lockfile 2>/dev/null || bun install
+# Install dependencies using npm (more reliable on Docker builds than bun)
+RUN npm install --omit=dev || npm install
 
 # Copy prisma schema and generate client
 COPY prisma ./prisma
-RUN bunx prisma generate
+RUN npx prisma generate
 
 # Copy source code
 COPY . .
 
-# Create storage directories
-RUN mkdir -p /app/storage/videos /app/storage/audio /app/storage/images /app/storage/clips /app/storage/thumbnails /app/db
+# Create storage directories (ephemeral on Render free, but works for runtime)
+RUN mkdir -p /app/storage/videos /app/storage/audio /app/storage/images /app/storage/clips /app/storage/thumbnails
 
 # Build the Next.js app
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN bun run build
-
-# Expose port (Railway provides PORT env var)
-ENV PORT=3000
 ENV STORAGE_ROOT=/app/storage
-ENV DATABASE_URL=file:/app/db/custom.db
-EXPOSE $PORT
+RUN npm run build
+
+# Expose port (Render/Railway provide PORT env var)
+EXPOSE 3000
 
 # Start command - run migrations then start server
-CMD ["sh", "-c", "bunx prisma db push --accept-data-loss && bun run start"]
+# DATABASE_URL must be set as env var (Supabase PostgreSQL connection string)
+# STORAGE_ROOT is set to /app/storage (ephemeral on free tier)
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npm run start"]
