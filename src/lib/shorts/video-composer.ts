@@ -9,11 +9,12 @@ import { promisify } from 'util';
 import { exec } from 'child_process';
 import { imageToZoomClip } from './image-generator';
 import { generateAssFile, WordTiming } from './ass-generator';
+import { STORAGE } from './storage';
 
 const execAsync = promisify(exec);
 
-const VIDEO_DIR = '/home/z/my-project/storage/videos';
-const CLIPS_DIR = '/home/z/my-project/storage/clips';
+const VIDEO_DIR = STORAGE.VIDEOS;
+const CLIPS_DIR = STORAGE.CLIPS;
 
 export interface ComposeOptions {
   shortId: string;

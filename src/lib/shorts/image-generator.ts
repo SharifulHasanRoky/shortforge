@@ -11,6 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import { STORAGE } from './storage';
 
 const execAsync = promisify(exec);
 
@@ -20,7 +21,7 @@ async function getZAI() {
   return zaiInstance;
 }
 
-const IMAGE_DIR = '/home/z/my-project/storage/images';
+const IMAGE_DIR = STORAGE.IMAGES;
 // 768x1344 is portrait AND both dimensions are multiples of 32 (API requirement).
 // We crop/scale to 720x1280 in the video composer for YouTube Shorts.
 const PORTRAIT_SIZE = '768x1344';

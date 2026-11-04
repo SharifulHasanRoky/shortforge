@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import { STORAGE } from './storage';
 
 const execAsync = promisify(exec);
 
@@ -17,7 +18,7 @@ async function getZAI() {
   return zaiInstance;
 }
 
-const AUDIO_DIR = '/home/z/my-project/storage/audio';
+const AUDIO_DIR = STORAGE.AUDIO;
 
 export interface TTSResult {
   audioPath: string;

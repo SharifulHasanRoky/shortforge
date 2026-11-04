@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
+import { STORAGE } from '@/lib/shorts/storage';
 
 /**
  * GET /api/shorts/[id]/thumbnail
@@ -33,7 +34,7 @@ export async function GET(
 
     // Fallback: extract first frame from video
     if (short.videoPath && fs.existsSync(short.videoPath)) {
-      const thumbDir = '/home/z/my-project/storage/thumbnails';
+      const thumbDir = STORAGE.THUMBNAILS;
       if (!fs.existsSync(thumbDir)) fs.mkdirSync(thumbDir, { recursive: true });
       const thumbPath = path.join(thumbDir, `${id}.jpg`);
       const { exec } = await import('child_process');

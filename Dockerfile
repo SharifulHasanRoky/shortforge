@@ -44,6 +44,8 @@ RUN bun run build
 
 # Expose port (Railway provides PORT env var)
 ENV PORT=3000
+ENV STORAGE_ROOT=/app/storage
+ENV DATABASE_URL=file:/app/db/custom.db
 EXPOSE $PORT
 
 # Start command - run migrations then start server
