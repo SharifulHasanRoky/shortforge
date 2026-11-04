@@ -1,50 +1,72 @@
-# Dockerfile for ShortForge - Faceless YouTube Shorts Automation
-# Uses ffmpeg + Node.js for full pipeline support
-# Works with PostgreSQL (Supabase/Neon) and SQLite (local dev)
+# Optimized Dockerfile for Render free tier (512MB RAM)
+# Multi-stage build to minimize final image size and build memory usage
 
-FROM node:20-slim
+# Stage 1: Build
+FROM node:20-slim AS builder
 
-# Install ffmpeg, fonts (for captions), OpenSSL (for Prisma), and other deps
+# Install only essential build deps (ffmpeg installed in runtime stage)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    fonts-dejavu \
-    fonts-dejavu-core \
-    fonts-dejavu-extra \
-    fonts-noto-color-emoji \
-    fonts-freefont-ttf \
     openssl \
     ca-certificates \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files first for better layer caching
+# Copy package files
 COPY package.json bun.lock* ./
 
-# Install dependencies using npm (more reliable on Docker builds than bun)
-RUN npm install --omit=dev || npm install
+# Install only production deps first (smaller, faster)
+RUN npm install --omit=dev --no-audit --no-fund
 
-# Copy prisma schema and generate client
+# Copy prisma and generate client
 COPY prisma ./prisma
 RUN npx prisma generate
 
-# Copy source code
+# Copy all source and build
 COPY . .
 
-# Create storage directories (ephemeral on Render free, but works for runtime)
-RUN mkdir -p /app/storage/videos /app/storage/audio /app/storage/images /app/storage/clips /app/storage/thumbnails
-
-# Build the Next.js app
+# Disable Next.js telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV STORAGE_ROOT=/app/storage
+
+# Build with low memory settings
+ENV NODE_OPTIONS="--max-old-space-size=400"
 RUN npm run build
 
-# Expose port (Render/Railway provide PORT env var)
+# Stage 2: Runtime (much smaller)
+FROM node:20-slim
+
+# Install ffmpeg + fonts for video composition at runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    fonts-dejavu-core \
+    fonts-freefont-ttf \
+    openssl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy built app from builder stage
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/next.config.ts ./
+COPY --from=builder /app/tsconfig.json ./
+COPY --from=builder /app/postcss.config.mjs ./
+COPY --from=builder /app/tailwind.config.ts ./
+COPY --from=builder /app/components.json ./
+COPY --from=builder /app/src ./src
+
+# Create storage dirs
+RUN mkdir -p /app/storage/videos /app/storage/audio /app/storage/images /app/storage/clips /app/storage/thumbnails
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV STORAGE_ROOT=/app/storage
+ENV NEXT_TELEMETRY_DISABLED=1
 EXPOSE 3000
 
-# Start command - run migrations then start server
-# DATABASE_URL must be set as env var (Supabase PostgreSQL connection string)
-# STORAGE_ROOT is set to /app/storage (ephemeral on free tier)
+# Run migrations + start
 CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npm run start"]
