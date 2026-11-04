@@ -6,7 +6,12 @@ echo "=== Starting ShortForge ==="
 echo "NODE_ENV: $NODE_ENV"
 echo "PORT: $PORT"
 echo "DATABASE_URL set: $([ -n "$DATABASE_URL" ] && echo yes || echo no)"
+echo "DIRECT_URL set: $([ -n "$DIRECT_URL" ] && echo yes || echo no)"
 echo "STORAGE_ROOT: $STORAGE_ROOT"
+
+# Set DIRECT_URL to DATABASE_URL if not set (Prisma needs it for migrations)
+export DIRECT_URL="${DIRECT_URL:-$DATABASE_URL}"
+echo "DIRECT_URL: $DIRECT_URL"
 
 # Run Prisma migrations
 echo ""
