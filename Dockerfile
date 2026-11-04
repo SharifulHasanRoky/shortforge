@@ -1,52 +1,41 @@
-# Minimal Dockerfile for Render free tier - aggressive memory optimization
+# Minimal Dockerfile for Render free tier
+# Single-stage to avoid copying issues
 
-FROM node:20-slim AS builder
+FROM node:20-slim
 
-# Install only openssl (Prisma needs it for Postgres)
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+# Install ffmpeg + minimal fonts + openssl for Prisma
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    fonts-dejavu-core \
+    fonts-freefont-ttf \
+    openssl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy package files first
+# Copy package files
 COPY package.json package-lock.json ./
-# Use npm ci for fast, reproducible installs (uses package-lock.json)
-RUN npm ci --omit=dev --no-audit --no-fund 2>/dev/null || npm install --omit=dev --no-audit --no-fund
 
-# Copy prisma and generate
+# Install ALL deps (including dev - we need them for build)
+RUN npm ci --no-audit --no-fund
+
+# Copy prisma and generate client
 COPY prisma ./prisma
 RUN npx prisma generate
 
 # Copy source
 COPY . .
 
-# Build with VERY tight memory limit
+# Build
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_OPTIONS="--max-old-space-size=300"
-# Disable SWC minification to save memory, use simpler build
+ENV NODE_OPTIONS="--max-old-space-size=400"
 RUN npm run build
 
-# Stage 2: runtime
-FROM node:20-slim
+# Remove dev dependencies to slim runtime image
+RUN npm prune --omit=dev
 
-# ffmpeg + minimal fonts
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg fonts-dejavu-core fonts-freefont-ttf openssl ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/next.config.ts ./
-COPY --from=builder /app/postcss.config.mjs ./
-COPY --from=builder /app/tailwind.config.ts ./
-COPY --from=builder /app/components.json ./
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/tsconfig.json ./
-
+# Create storage dirs
 RUN mkdir -p /app/storage/videos /app/storage/audio /app/storage/images /app/storage/clips /app/storage/thumbnails
 
 ENV NODE_ENV=production
@@ -55,4 +44,5 @@ ENV STORAGE_ROOT=/app/storage
 ENV NEXT_TELEMETRY_DISABLED=1
 EXPOSE 3000
 
+# Run migrations + start
 CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npm run start"]
